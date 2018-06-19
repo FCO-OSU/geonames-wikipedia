@@ -1,0 +1,79 @@
+---
+title: "Geonames in Wikipedia"
+output: html_document
+---
+
+## Summary
+
+This project aims to look at how useful wikipedia data in a descriptive sense to measure interest in a topic. An initial data set has been put together by Robin that provides all the current wikipedia pages (30.05.2018) which contain a geo-tagged location as compiled by the geonames database (compile-geonames-wikipedia.R). 
+
+```{r setup, eval=FALSE}
+require(tidyverse)
+setwd("~/dataScience/wikipedia/")
+wp = read_csv("geonames-wikipedia-master/wiki_places.csv")
+names(wp)
+
+# parse data set for searching for page views
+wp$project = lapply(wp$link, function(x) unlist(strsplit(x, "/"))[3])
+wp$article = lapply(wp$link, function(x) unlist(strsplit(x, "/"))[5])
+```
+
+## Get wikipedia page views
+
+The page views for the articles in `r wp` above can be found using the package `r pageview`  (https://cran.r-project.org/web/packages/pageviews/vignettes/Accessing_Wikimedia_pageviews.html).
+
+```{r eval=FALSE, echo=TRUE}
+library(pageviews)
+
+# function to cycle through the project and article to get the number of page views in a given date range
+getArticle = function(df, startdate = '2018-04-01', enddate = '2018-05-01'){
+  # x = article_pageviews(project = "en.wikipedia", article = "Xixerella", 
+  #                     start = as.Date('2015-01-01'), end = as.Date("2017-12-31"), 
+  #                     user_type = c("user", "bot"), platform = c("desktop", "mobile-web")) %>% 
+  #         group_by(date) %>% select(project, language, article, date, views)
+  datalist = list()
+  
+  for (i in 1:length(df[1,])) {
+      dat = article_pageviews(project = df$project[i], article = df$article[i],
+                          start = as.Date(startdate), end = as.Date(enddate),
+                          user_type = c("user", "bot"), platform = c("desktop", "mobile-web")) %>%
+              group_by(date) %>% select(project, language, article, date, views)
+      dat$i <- i  # maybe you want to keep track of which iteration produced it?
+      datalist[[i]] <- dat # add it to your list
+      Sys.sleep(time = 10)
+  }
+  
+  big_data = do.call(rbind, datalist)
+  return(big_data)
+}
+
+y = getArticle(wp[1,]) # doesn't work 19.06.2018
+
+```
+
+## Find the languages of the websites using WikidataR
+
+The WikidataR library will retrieve the different languages of a particular wikipedia page. This can take the above wikipedia pages from `r wp` and will find all the languages 
+
+```{r wikidata, eval=FALSE}
+library(WikidataR)
+
+# find id for "London" wikipedia page
+testpage = find_item("London")
+gettestpage = get_item(testpage[[1]]$id)
+
+# get the languages of the page
+# languages are in gettestpage[[1]]$labels
+languageLabels = unlist(gettestpage[[1]]$labels)
+labsToUse = languageLabels[seq(1,length(languageLabels),2)] # languages of the wiki page
+names(labsToUse) = NULL
+namesToUse = languageLabels[seq(2,length(languageLabels),2)] # languages of the wiki page
+names(namesToUse) = NULL
+
+# create a new project name for the search term
+newSearches = as.data.frame(cbind(project = paste0(labsToUse, ".wikipedia"), article = namesToUse), stringsAsFactors = F)
+
+z = getArticle(newSearches[1:10,])
+```
+
+
